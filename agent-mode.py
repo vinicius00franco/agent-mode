@@ -34,6 +34,7 @@ Instructions for local execution:
 import os
 import requests
 import arxiv
+import gc  # <-- MUDANÇA: Importado o garbage collector para limpeza de memória
 from dotenv import load_dotenv
 
 # LlamaIndex Imports
@@ -51,7 +52,7 @@ from llama_index.core.agent import (
     ReActAgent
 )
 from llama_index.llms.groq import Groq
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.embeddings.nvidia import NVIDIAEmbedding  # <-- MUDANÇA: Importado o embedding da NVIDIA
 from llama_index.tools.tavily_research import TavilyToolSpec
 
 # CrewAI Imports
@@ -64,6 +65,10 @@ from crewai_tools import LlamaIndexTool
 # ==============================================================================
 # Load environment variables from a .env file
 load_dotenv()
+
+# <-- MUDANÇA: Configurações de otimização de memória
+# Configura o garbage collector para ser mais agressivo
+gc.set_threshold(700, 10, 10)  # Valores mais baixos para coleta mais frequente
 
 groq_key = os.getenv('GROQ_API_KEY')
 tavily_key = os.getenv('TAVILY_API_KEY')
@@ -78,9 +83,16 @@ if not all([groq_key, tavily_key, nvidia_key]):
 # LLM for LlamaIndex Agents
 llm_groq = Groq(model="llama-3.1-70b-versatile", api_key=groq_key)
 
+
 # Global settings for LlamaIndex
 Settings.llm = llm_groq
-Settings.embed_model = HuggingFaceEmbedding(model_name="intfloat/multilingual-e5-large")
+# <-- MUDANÇA PRINCIPAL: Troca do embedding local por um via API
+# O modelo 'nv-embed-qa-e4' é otimizado para tarefas de busca e resposta.
+Settings.embed_model = NVIDIAEmbedding(
+    model="nv-embed-qa-e4",
+    api_key=nvidia_key,
+    truncate="END"  # Necessário para modelos de embedding da NVIDIA
+)
 
 # --- CrewAI LLM Configuration ---
 # Note: The original code used "nvidia_nim/meta/llama-3.3-70b-instruct".
@@ -94,7 +106,17 @@ llm_crewai = CrewAI_LLM(
 
 
 # ==============================================================================
-# 4. FUNCTION DEFINITIONS
+# 4. UTILITY FUNCTIONS
+# ==============================================================================
+
+def limpar_memoria():
+    """
+    Função utilitária para forçar a limpeza de memória.
+    """
+    gc.collect()
+    
+# ==============================================================================
+# 5. FUNCTION DEFINITIONS
 # ==============================================================================
 
 def calcular_engajamento(curtidas: int, comentarios: int, compartilhamentos: int, seguidores: int) -> str:
@@ -150,7 +172,7 @@ def baixar_pdf_arxiv(link: str) -> str:
 
 
 # ==============================================================================
-# 5. MAIN EXECUTION BLOCK
+# 6. MAIN EXECUTION BLOCK
 # ==============================================================================
 
 if __name__ == '__main__':
@@ -197,6 +219,10 @@ if __name__ == '__main__':
     response3 = agent_aula1.chat("Me retorne artigos sobre o uso da inteligência artificial nas redes sociais")
     print("Resposta do Agente:", response3)
 
+    # <-- MUDANÇA: Limpeza de memória após uso do agente da Aula 1
+    del agent_worker_aula1, agent_aula1
+    limpar_memoria()
+
 
     # --------------------------------------------------------------------------
     # AULA 2: APROFUNDANDO NAS PESQUISAS
@@ -218,6 +244,10 @@ if __name__ == '__main__':
     )
     print("Resposta do Agente:", response4)
 
+    # <-- MUDANÇA: Limpeza de memória após uso do agente Tavily
+    del agent_worker_tavily, agent_tavily
+    limpar_memoria()
+
     # Vídeo 2.2 & 2.3: Base de dados vetorial e engines de busca
     print("\n--- Criando e carregando base de dados vetorial ---")
     # O código criará as pastas 'data' e 'storage' no diretório atual.
@@ -226,27 +256,28 @@ if __name__ == '__main__':
     os.makedirs("storage/artigo", exist_ok=True)
     os.makedirs("storage/livro", exist_ok=True)
 
-    # Para o código rodar, vamos criar arquivos dummy. Substitua por seus PDFs reais.
     try:
-        with open("data/artigo1.pdf", "w", encoding="utf-8") as f:
+        # Usando arquivos de texto dummy, mas a lógica é a mesma para PDFs.
+        with open("data/artigo1.txt", "w", encoding="utf-8") as f:  # .txt é mais simples para o exemplo
             f.write("Este é um texto sobre algoritmos de IA em redes sociais.")
-        with open("data/livro1.pdf", "w", encoding="utf-8") as f:
+        with open("data/livro1.txt", "w", encoding="utf-8") as f:  # .txt é mais simples para o exemplo
             f.write("Este é um livro sobre tendências em inteligência artificial.")
 
-        artigo_docs = SimpleDirectoryReader(input_files=["data/artigo1.pdf"]).load_data()
-        livro_docs = SimpleDirectoryReader(input_files=["data/livro1.pdf"]).load_data()
+        artigo_docs = SimpleDirectoryReader(input_files=["data/artigo1.txt"]).load_data()
+        livro_docs = SimpleDirectoryReader(input_files=["data/livro1.txt"]).load_data()
 
-        # Criando e persistindo os índices
         artigo_index = VectorStoreIndex.from_documents(artigo_docs)
         artigo_index.storage_context.persist(persist_dir="storage/artigo")
-
+        
         livro_index = VectorStoreIndex.from_documents(livro_docs)
         livro_index.storage_context.persist(persist_dir="storage/livro")
 
-        # Carregando os índices
+        # <-- MUDANÇA: Limpeza de memória após indexação
+        del artigo_docs, livro_docs, artigo_index, livro_index
+        limpar_memoria()
+
         artigo_storage = StorageContext.from_defaults(persist_dir="storage/artigo")
         loaded_artigo_index = load_index_from_storage(artigo_storage)
-
         livro_storage = StorageContext.from_defaults(persist_dir="storage/livro")
         loaded_livro_index = load_index_from_storage(livro_storage)
 
@@ -254,20 +285,8 @@ if __name__ == '__main__':
         livro_engine = loaded_livro_index.as_query_engine(similarity_top_k=3)
 
         query_engine_tools = [
-            QueryEngineTool(
-                query_engine=artigo_engine,
-                metadata=ToolMetadata(
-                    name="artigo_engine",
-                    description="Fornece informações sobre algoritmos de IA em redes sociais a partir de um artigo específico."
-                ),
-            ),
-            QueryEngineTool(
-                query_engine=livro_engine,
-                metadata=ToolMetadata(
-                    name="livro_engine",
-                    description="Fornece informações sobre tendências de IA a partir de um livro específico."
-                ),
-            ),
+            QueryEngineTool(query_engine=artigo_engine, metadata=ToolMetadata(name="artigo_engine", description="Fornece informações sobre algoritmos de IA em redes sociais a partir de um artigo específico.")),
+            QueryEngineTool(query_engine=livro_engine, metadata=ToolMetadata(name="livro_engine", description="Fornece informações sobre tendências de IA a partir de um livro específico.")),
         ]
         print("Bases de dados vetoriais criadas e carregadas com sucesso.")
 
@@ -297,12 +316,20 @@ if __name__ == '__main__':
         response6 = agent_documentos.chat("Quais as principais tendências de IA que eu deveria estudar?")
         print("Resposta do Agente:", response6)
 
+        # <-- MUDANÇA: Limpeza de memória após uso dos agentes de documentos
+        del agent_worker_docs, agent_documentos
+        limpar_memoria()
+
         # Vídeo 3.2: Usando um agente ReAct
         agent_react = ReActAgent.from_tools(query_engine_tools, llm=llm_groq, verbose=True)
 
         print("\n--- Teste 3.3: Consultando artigo com ReActAgent ---")
         response7 = agent_react.chat("Quais os principais algoritmos de IA usados nas redes sociais?")
         print("Resposta do Agente:", response7)
+        
+        # <-- MUDANÇA: Limpeza de memória após uso do agente ReAct
+        del agent_react
+        limpar_memoria()
         
     # Vídeo 3.3: Configurando o CrewAI
     print("\n--- Configurando CrewAI para pesquisa no Arxiv ---")
@@ -335,6 +362,9 @@ if __name__ == '__main__':
     print(result_crew1)
     print("############################################################\n")
 
+    # <-- MUDANÇA: Limpeza de memória após uso do primeiro crew
+    del crew_arxiv, result_crew1
+    limpar_memoria()
 
     # --------------------------------------------------------------------------
     # AULA 4: MÚLTIPLAS TAREFAS E AGENTES
@@ -374,6 +404,10 @@ if __name__ == '__main__':
     print("\n###################### RESULTADO CREW 2 ######################")
     print(result_crew2)
     print("############################################################\n")
+    
+    # <-- MUDANÇA: Limpeza de memória após uso do segundo crew
+    del crew_download, result_crew2
+    limpar_memoria()
     
     # Vídeo 4.2: Combinando agentes (Pesquisa na Web e Verificação)
     print("\n--- Configurando CrewAI com múltiplos agentes (Pesquisador Web e Verificador) ---")
@@ -421,6 +455,10 @@ if __name__ == '__main__':
     print(result_crew3)
     print("############################################################\n")
     
+    # <-- MUDANÇA: Limpeza de memória após uso do terceiro crew
+    del crew_verificacao, result_crew3
+    limpar_memoria()
+    
     # Vídeo 4.3: Trabalhando com Hierarquia
     print("\n--- Configurando CrewAI com processo hierárquico ---")
     
@@ -446,3 +484,9 @@ if __name__ == '__main__':
     print("\n###################### RESULTADO CREW 4 (Hierárquico) ######################")
     print(result_crew4)
     print("#########################################################################\n")
+    
+    # <-- MUDANÇA: Limpeza final de memória
+    del crew_hierarquica, result_crew4
+    limpar_memoria()
+    
+    print("\n=== EXECUÇÃO COMPLETA - TODAS AS AULAS FINALIZADAS ===")
