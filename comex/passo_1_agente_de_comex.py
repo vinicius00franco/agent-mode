@@ -12,8 +12,8 @@ async def main():
         fn=config.obter_dados_comex,
         name="obter_dados_comex",
         description="""
-        Esta ferramenta baixa e carrega os dados brutos de exportação ou importação
-        do governo brasileiro para um ano e mês específicos.
+        Esta ferramenta baixa os dados anuais brutos de exportação ou importação
+        do governo brasileiro para um ano específico e os filtra para um mês específico.
         Usa os parâmetros 'ano', 'mes' e 'tipo_operacao' ('EXPORTACAO' ou 'IMPORTACAO').
         """,
     )
@@ -41,6 +41,7 @@ async def main():
         tools=[ferramenta_obter_dados, ferramenta_resumo_dados, ferramenta_limpar_dados],
         llm=config.llm_groq,
         verbose=True,
+        max_steps=3  # Adiciona um limite de passos para evitar loops infinitos
     )
 
     print("\n--- Teste 1.1: Cenário para Agente de Cargas ---")
