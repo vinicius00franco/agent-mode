@@ -1,7 +1,7 @@
 import asyncio
 import passo_0_configuracao_e_ferramentas as config
 
-async def main():
+def main():
     print("--- CHECKPOINT 2: AGENTE ANALÍTICO COM CACHE ---")
 
     ferramenta_obter_dados = config.FunctionTool.from_defaults(
@@ -21,15 +21,15 @@ async def main():
     )
     ferramenta_limpar_dados = config.FunctionTool.from_defaults(fn=config.limpar_dados_comex)
 
-    agent = config.ReActAgent.from_new(
+    agent = config.ReActAgent(
         tools=[ferramenta_obter_dados, ferramenta_analise, ferramenta_estatisticas, ferramenta_limpar_dados],
         llm=config.llm_groq,
         verbose=True
     )
 
-    await agent.achat("Carregue os dados de exportação de 2024.")
-    response = await agent.achat("Agora, com base nesses dados, me dê um insight sobre os 5 principais estados exportadores em maio.")
+    agent.chat("Carregue os dados de exportação de 2024.")
+    response = agent.chat("Agora, com base nesses dados, me dê um insight sobre os 5 principais estados exportadores em maio.")
     print("Resposta do Agente:", response)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
