@@ -4,27 +4,36 @@ import passo_0_configuracao_e_ferramentas as config
 
 async def main():
     print("\n" + "=" * 50)
-    print("PASSO 1: AGENTE DE ANÁLISE DE COMÉRCIO EXTERIOR")
+    print("PASSO 1: AGENTE DE ANÁLISE DE COMÉRCIO EXTERIOR (V2 - COM INSIGHTS)")
     print("=" * 50 + "\n")
 
-    # Criando ferramentas a partir das funções importadas
+    # Criando ferramentas a partir das NOVAS funções
     ferramenta_obter_dados = config.FunctionTool.from_defaults(
-        fn=config.obter_dados_comex,
-        name="obter_dados_comex",
+        fn=config.obter_dados_comex_inteligente,
+        name="obter_dados_comex_inteligente",
         description="""
-        Esta ferramenta baixa os dados anuais brutos de exportação ou importação
-        do governo brasileiro para um ano específico e os filtra para um mês específico.
-        Usa os parâmetros 'ano', 'mes' e 'tipo_operacao' ('EXPORTACAO' ou 'IMPORTACAO').
+        Primeiro passo obrigatório. Baixa os dados de um mês/ano específico. 
+        Esta ferramenta descobre se é exportação ou importação pela pergunta do usuário.
+        Usa os parâmetros 'ano', 'mes' e 'pergunta_original'.
         """,
     )
-    
-    ferramenta_resumo_dados = config.FunctionTool.from_defaults(
-        fn=config.resumo_dados_comex,
-        name="resumo_dados_comex",
+
+    ferramenta_analise = config.FunctionTool.from_defaults(
+        fn=config.analisar_principais_entidades,
+        name="analisar_principais_entidades",
         description="""
-        Esta ferramenta executa consultas específicas sobre os dados de comércio exterior
-        já carregados na memória, como 'média do peso líquido' ou 'principais estados'.
-        Usa o parâmetro 'consulta'.
+        Use esta ferramenta APÓS carregar os dados.
+        Retorna um JSON com os top N de uma categoria (estados, produtos) por valor ('VL_FOB') ou peso ('KG_LIQUIDO').
+        Use 'SG_UF_MUN' para estados e 'NO_NCM_POR' para nome do produto.
+        """,
+    )
+
+    ferramenta_estatisticas = config.FunctionTool.from_defaults(
+        fn=config.obter_estatisticas_gerais,
+        name="obter_estatisticas_gerais",
+        description="""
+        Use esta ferramenta APÓS carregar os dados.
+        Retorna um JSON com estatísticas gerais (soma, média, etc.) sobre uma coluna numérica.
         """,
     )
 
@@ -32,38 +41,35 @@ async def main():
         fn=config.limpar_dados_comex,
         name="limpar_dados_comex",
         description="""
-        Esta ferramenta remove os dados carregados da memória para liberar recursos.
-        Use-a quando a análise estiver completa.
+        Use esta ferramenta ao final de toda a análise para limpar os dados da memória.
         """,
     )
 
-    agent = config.ReActAgent(
-        tools=[ferramenta_obter_dados, ferramenta_resumo_dados, ferramenta_limpar_dados],
+    agent = config.ReActAgent.from_new(
+        tools=[ferramenta_obter_dados, ferramenta_analise, ferramenta_estatisticas, ferramenta_limpar_dados],
         llm=config.llm_groq,
         verbose=True,
-        max_steps=5  # Adiciona um limite de passos para evitar loops infinitos
+        # Aumentar os passos pois a análise pode exigir mais interações
+        max_steps=10  
     )
 
-    print("\n--- Teste 1.1: Cenário para Agente de Cargas ---")
-    response1 = await agent.run(
-        "Baixe os dados de importação de maio de 2024. Depois, me diga qual a média do peso líquido das cargas. Por fim, limpe os dados da memória."
-    )
+    print("\n--- Teste 2.1: Pergunta sobre Exportadores com Geração de Insight ---")
+    pergunta1 = "Quais foram os principais estados exportadores em abril de 2024? Me dê um insight sobre os dados."
+    response1 = await agent.achat(pergunta1)
     print("Resposta do Agente:", response1)
-    
-    print("\n--- Teste 1.2: Cenário para Exportadores ---")
-    response2 = await agent.run(
-        "Para o ano de 2024, no mês de abril, quais foram os 5 principais estados exportadores? Baixe os dados necessários e me dê essa informação. Depois, limpe a memória."
-    )
+
+    # Limpando a memória manualmente para o próximo teste independente
+    config.limpar_dados_comex() 
+
+    print("\n--- Teste 2.2: Pergunta sobre Produtos Importados e Estatísticas ---")
+    pergunta2 = "Analise as importações de maio de 2024. Quais os 3 produtos mais comprados pelo Brasil em termos de valor? Some o valor total importado no mês."
+    response2 = await agent.achat(pergunta2)
     print("Resposta do Agente:", response2)
 
-    print("\n--- Teste 1.3: Tentativa de análise sem baixar os dados ---")
-    response3 = await agent.run(
-        "Qual a média do peso líquido das exportações? Não sei o mês ou ano, e não baixei os dados."
-    )
-    print("Resposta do Agente:", response3)
+    config.limpar_dados_comex()
 
     print("\n" + "=" * 50)
-    print("PASSO 1 CONCLUÍDO")
+    print("PASSO 1 (V2) CONCLUÍDO")
     print("=" * 50 + "\n")
 
 

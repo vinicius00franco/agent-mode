@@ -14,6 +14,7 @@ import requests
 import pandas as pd
 import gc
 from dotenv import load_dotenv
+import json
 
 # LlamaIndex Imports
 from llama_index.core import Settings
@@ -48,23 +49,45 @@ df_comex = None
 # ===============================================================================
 # DEFINIÇÕES DE FUNÇÕES (FERRAMENTAS)
 # ===============================================================================
-def obter_dados_comex(ano: str, mes: str, tipo_operacao: str) -> str:
+def obter_dados_comex_inteligente(ano: str, mes: str, pergunta_original: str) -> str:
     """
-    Baixa e carrega os dados de comércio exterior (EXP ou IMP) para um
-    determinado ano e mês.
+    Baixa e carrega os dados de comércio exterior para um ano e mês.
+    Esta função infere se a operação é de Exportação (EXP) ou Importação (IMP)
+    com base nas palavras-chave da pergunta do usuário.
 
     Args:
         ano (str): O ano dos dados, por exemplo, '2024'.
         mes (str): O mês dos dados, por exemplo, 'janeiro'.
-        tipo_operacao (str): 'EXP' ou 'IMP'.
+        pergunta_original (str): A pergunta completa feita pelo usuário.
 
     Returns:
         str: Uma mensagem de sucesso ou erro.
     """
     global df_comex
-    print("\n================ INÍCIO obter_dados_comex ================")
-    print(f"Parâmetros recebidos: ano={ano}, mes={mes}, tipo_operacao={tipo_operacao}")
-    tipo_operacao = tipo_operacao.upper()
+    print("\n================ INÍCIO obter_dados_comex_inteligente ================")
+    print(f"Parâmetros recebidos: ano={ano}, mes={mes}")
+    print(f"Analisando pergunta: '{pergunta_original}'")
+
+    pergunta_lower = pergunta_original.lower()
+
+    # Lógica para inferir o tipo de operação
+    palavras_exportacao = ['exportado', 'exportação', 'vendeu', 'enviou', 'exportadores']
+    palavras_importacao = ['importado', 'importação', 'comprou', 'recebeu', 'importadores']
+
+    tipo_operacao = None
+    if any(palavra in pergunta_lower for palavra in palavras_exportacao):
+        tipo_operacao = "EXP"
+    elif any(palavra in pergunta_lower for palavra in palavras_importacao):
+        tipo_operacao = "IMP"
+
+    if not tipo_operacao:
+        print("[ERRO] Não foi possível determinar o tipo de operação (Exportação/Importação).")
+        print("================ FIM obter_dados_comex_inteligente ================\n")
+        return "Não consegui identificar se a pergunta se refere a exportação ou importação. Por favor, seja mais específico."
+
+    print(f"[INFO] Operação inferida: {tipo_operacao}")
+
+    # O resto da função continua o mesmo, usando a variável `tipo_operacao` inferida
     meses = {
         'janeiro': 1, 'fevereiro': 2, 'março': 3, 'abril': 4,
         'maio': 5, 'junho': 6, 'julho': 7, 'agosto': 8,
@@ -73,37 +96,20 @@ def obter_dados_comex(ano: str, mes: str, tipo_operacao: str) -> str:
     mes_num = meses.get(mes.lower())
 
     if not mes_num:
-        print("[ERRO] Mês inválido!")
-        print("================ FIM obter_dados_comex ================\n")
-        return "Mês inválido. Por favor, use o nome completo do mês em português."
-    if tipo_operacao not in ["EXP", "IMP"]:
-        print("[ERRO] Tipo de operação inválido!")
-        print("================ FIM obter_dados_comex ================\n")
-        return "Tipo de operação inválido. Use 'EXP' ou 'IMP'."
+        return "Mês inválido."
 
     url = f"https://balanca.economia.gov.br/balanca/bd/comexstat-bd/mun/{tipo_operacao}_{ano}_MUN.csv"
     try:
-        print(f"[DOWNLOAD] Baixando dados anuais de {tipo_operacao} para {ano}...")
+        print(f"[DOWNLOAD] Baixando dados de {tipo_operacao} para {ano}...")
         df_anual = pd.read_csv(url, sep=';', encoding='iso-8859-1')
-        print(f"[OK] Dados anuais de {tipo_operacao} carregados. Total de linhas: {len(df_anual)}")
         df_comex = df_anual[df_anual['CO_MES'] == mes_num].copy()
         if df_comex.empty:
-            print(f"[AVISO] Nenhum dado encontrado para o mês de {mes}/{ano}!")
-            print("================ FIM obter_dados_comex ================\n")
-            return f"Nenhum dado de {tipo_operacao} encontrado para o mês de {mes}/{ano}. Verifique se a combinação de mês e ano possui dados."
-        print(f"[OK] Dados filtrados para o mês de {mes}/{ano}. Total de linhas: {len(df_comex)}")
-        print("================ FIM obter_dados_comex ================\n")
-        return f"Dados de {tipo_operacao} para {mes}/{ano} carregados com sucesso. Agora você pode fazer perguntas sobre eles."
-    except requests.exceptions.HTTPError as e:
-        print(f"[ERRO HTTP] {e}")
-        if e.response is not None and e.response.status_code == 404:
-            print("================ FIM obter_dados_comex ================\n")
-            return f"Erro: O arquivo de dados para {tipo_operacao} em {ano} não foi encontrado. A URL tentada foi: {url}. Por favor, verifique se os dados para este período estão disponíveis."
-        print("================ FIM obter_dados_comex ================\n")
-        return f"Erro HTTP ao baixar os dados: {e}. URL tentada: {url}"
+            return f"Nenhum dado de {tipo_operacao} encontrado para {mes}/{ano}."
+
+        print(f"[OK] Dados de {tipo_operacao} para {mes}/{ano} carregados. Linhas: {len(df_comex)}")
+        print("================ FIM obter_dados_comex_inteligente ================\n")
+        return f"Dados de {tipo_operacao} para {mes}/{ano} carregados com sucesso. Agora posso analisá-los para gerar insights."
     except Exception as e:
-        print(f"[ERRO EXCEÇÃO] {e}")
-        print("================ FIM obter_dados_comex ================\n")
         return f"Ocorreu um erro ao processar os dados: {e}"
 
 def resumo_dados_comex(consulta: str) -> str:
@@ -164,5 +170,73 @@ def limpar_dados_comex() -> str:
     print("[OK] Dados de comércio exterior foram limpos da memória.")
     print("================ FIM limpar_dados_comex ================\n")
     return "Os dados foram removidos da memória com sucesso."
+
+def analisar_principais_entidades(
+    coluna_entidade: str, 
+    coluna_metrica: str = 'VL_FOB', 
+    top_n: int = 5
+) -> str:
+    """
+    Analisa os dados carregados para encontrar as principais entidades (estados, municípios, produtos)
+    com base em uma métrica (valor ou peso).
+
+    Args:
+        coluna_entidade (str): A coluna a ser agrupada (ex: 'SG_UF_MUN', 'NO_NCM_POR').
+        coluna_metrica (str): A métrica para somar (ex: 'VL_FOB' para valor, 'KG_LIQUIDO' para peso).
+        top_n (int): O número de principais resultados a serem retornados.
+
+    Returns:
+        str: Uma string JSON contendo os dados da análise ou uma mensagem de erro.
+    """
+    print("\n================ INÍCIO analisar_principais_entidades ================")
+    global df_comex
+    if df_comex is None:
+        return "Erro: Nenhum dado carregado. Use 'obter_dados_comex_inteligente' primeiro."
+    if coluna_entidade not in df_comex.columns or coluna_metrica not in df_comex.columns:
+        return f"Erro: Uma das colunas '{coluna_entidade}' ou '{coluna_metrica}' não foi encontrada."
+
+    print(f"Analisando top {top_n} de '{coluna_entidade}' pela métrica '{coluna_metrica}'")
+
+    # Agrupar, somar, ordenar e pegar o top N
+    analise_df = df_comex.groupby(coluna_entidade)[coluna_metrica].sum().sort_values(ascending=False).head(top_n)
+
+    # Formatar como um dicionário para converter para JSON
+    resultado = analise_df.reset_index().to_dict(orient='records')
+
+    print(f"[OK] Análise concluída: {resultado}")
+    print("================ FIM analisar_principais_entidades ================\n")
+    return json.dumps(resultado, ensure_ascii=False)
+
+def obter_estatisticas_gerais(coluna_metrica: str = 'VL_FOB') -> str:
+    """
+    Calcula estatísticas descritivas gerais (total, média, máximo) para uma métrica.
+
+    Args:
+        coluna_metrica (str): A métrica a ser analisada (ex: 'VL_FOB', 'KG_LIQUIDO').
+
+    Returns:
+        str: Uma string JSON contendo as estatísticas ou uma mensagem de erro.
+    """
+    print("\n================ INÍCIO obter_estatisticas_gerais ================")
+    global df_comex
+    if df_comex is None:
+        return "Erro: Nenhum dado carregado."
+    if coluna_metrica not in df_comex.columns:
+        return f"Erro: A coluna '{coluna_metrica}' não foi encontrada."
+
+    total = df_comex[coluna_metrica].sum()
+    media = df_comex[coluna_metrica].mean()
+    maximo = df_comex[coluna_metrica].max()
+
+    resultado = {
+        f"total_{coluna_metrica}": total,
+        f"media_{coluna_metrica}": media,
+        f"maximo_{coluna_metrica}": maximo,
+        "numero_operacoes": len(df_comex)
+    }
+
+    print(f"[OK] Estatísticas calculadas: {resultado}")
+    print("================ FIM obter_estatisticas_gerais ================\n")
+    return json.dumps(resultado)
 
 print("Módulo de configuração de Comércio Exterior carregado.")
