@@ -41,7 +41,7 @@ async def main():
         tools=[ferramenta_obter_dados, ferramenta_resumo_dados, ferramenta_limpar_dados],
         llm=config.llm_groq,
         verbose=True,
-        max_steps=3  # Adiciona um limite de passos para evitar loops infinitos
+        max_steps=5  # Adiciona um limite de passos para evitar loops infinitos
     )
 
     print("\n--- Teste 1.1: Cenário para Agente de Cargas ---")

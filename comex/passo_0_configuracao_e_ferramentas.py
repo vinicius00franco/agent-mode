@@ -50,13 +50,13 @@ df_comex = None
 # ===============================================================================
 def obter_dados_comex(ano: str, mes: str, tipo_operacao: str) -> str:
     """
-    Baixa e carrega os dados de comércio exterior (EXPORTACAO ou IMPORTACAO) para um
+    Baixa e carrega os dados de comércio exterior (EXP ou IMP) para um
     determinado ano e mês.
 
     Args:
         ano (str): O ano dos dados, por exemplo, '2024'.
         mes (str): O mês dos dados, por exemplo, 'janeiro'.
-        tipo_operacao (str): 'EXPORTACAO' ou 'IMPORTACAO'.
+        tipo_operacao (str): 'EXP' ou 'IMP'.
 
     Returns:
         str: Uma mensagem de sucesso ou erro.
@@ -76,10 +76,10 @@ def obter_dados_comex(ano: str, mes: str, tipo_operacao: str) -> str:
         print("[ERRO] Mês inválido!")
         print("================ FIM obter_dados_comex ================\n")
         return "Mês inválido. Por favor, use o nome completo do mês em português."
-    if tipo_operacao not in ["EXPORTACAO", "IMPORTACAO"]:
+    if tipo_operacao not in ["EXP", "IMP"]:
         print("[ERRO] Tipo de operação inválido!")
         print("================ FIM obter_dados_comex ================\n")
-        return "Tipo de operação inválido. Use 'EXPORTACAO' ou 'IMPORTACAO'."
+        return "Tipo de operação inválido. Use 'EXP' ou 'IMP'."
 
     url = f"https://balanca.economia.gov.br/balanca/bd/comexstat-bd/mun/{tipo_operacao}_{ano}_MUN.csv"
     try:
