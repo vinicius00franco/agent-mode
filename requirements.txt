@@ -1,12 +1,14 @@
 
 python-dotenv
+pandas
+requests
 llama-index
+llama-index-llms-groq
+llama-index-embeddings-nvidia
+pyarrow
 llama_index.embeddings.huggingface
 llama-index-readers-file
-llama-index-llms-groq
 arxiv
 llama-index-tools-tavily-research
 crewai
 crewai-tools
-requests
-llama-index-embeddings-nvidia
